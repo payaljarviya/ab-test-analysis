@@ -1,6 +1,6 @@
 # A/B Test Design and Causal Analysis
 
-A clean A/B test on a meaningless metric tells you almost nothing. This project demonstrates the full statistical workflow for a checkout conversion experiment: power analysis before the test, frequentist and Bayesian inference after, CUPED variance reduction throughout, and a business impact calculation at the end.
+**The data in this project is simulated.** No real users were tested. What is being demonstrated is the statistical workflow: power analysis before the test, frequentist and Bayesian inference after, CUPED variance reduction, and an honest reading of what the result does and does not support.
 
 [![Python](https://img.shields.io/badge/Python-3.8+-3776AB?style=flat&logo=python&logoColor=white)](https://python.org)
 [![SciPy](https://img.shields.io/badge/SciPy-Stats-8CAAE6?style=flat)](https://scipy.org)
@@ -8,36 +8,50 @@ A clean A/B test on a meaningless metric tells you almost nothing. This project 
 
 ## The experiment
 
-One-page checkout vs. multi-step checkout. Conversion rate as primary metric, average order value as secondary.
+A checkout optimisation test. One-page checkout as control, multi-step checkout as treatment. Conversion rate is the primary metric.
 
 | Parameter | Value |
 |-----------|-------|
-| Minimum detectable effect | 0.5 percentage points |
-| Required sample size | ~8,600 per group |
-| Significance level | 0.05 |
+| Baseline conversion rate | 4.0% |
+| Minimum detectable effect | 0.5 percentage points, absolute |
+| Significance level | 0.05, two-tailed |
 | Statistical power | 80% |
-| Test type | Two-tailed z-test + Bayesian Beta-Binomial |
+| **Required sample size** | **25,551 per group** |
+| Random seed | 42 |
+
+The sample size is derived from the four parameters above, not chosen. At a 4% baseline, detecting a 0.5pp absolute lift with 80% power needs roughly 25,500 users per arm. A smaller test would only be powered to detect a larger effect: 8,600 per arm, for instance, detects 0.88pp rather than 0.5pp.
 
 ## Results
 
-| Metric | Control | Treatment | Lift | p-value |
-|--------|---------|-----------|------|---------|
-| Conversion rate | 4.00% | 5.20% | +1.20pp (+30%) | < 0.001 |
-| Average order value | ~$58 | ~$61 | +$3 (+5%) | < 0.05 |
+| Metric | Control | Treatment | Absolute lift | 95% CI | p-value |
+|--------|---------|-----------|---------------|--------|---------|
+| Conversion rate | 4.07% (1,040 / 25,551) | 5.34% (1,365 / 25,551) | +1.27pp | +0.90 to +1.64pp | < 0.001 |
 
-Bayesian result: P(Treatment > Control) = ~99%. Both analyses point the same direction.
+The confidence interval does not contain zero, so the effect is significant at the stated alpha. The Bayesian analysis points the same way.
 
-At 200,000 monthly visitors, that lift translates to a material annualised revenue increase — run the script to see the exact figure.
+**The multi-step checkout (treatment) is the winner on this simulated data.**
+
+## CUPED returned zero, and that is the interesting part
+
+CUPED reduces variance by using a pre-experiment covariate to strip out the part of each user's outcome that was predictable before the test began. Less noise means the same statistical power at a smaller sample size.
+
+It only works when the covariate actually predicts the outcome. **On this data the pre-experiment purchase covariate carried no signal, so variance reduction came out at 0%.** Implementing it and reporting that it did nothing is the honest result. A CUPED implementation that always reports a large reduction is usually measuring its own assumptions.
 
 ## Why each step matters
 
-**Pre-test power analysis.** You can't interpret a test result if you didn't size the test correctly beforehand. Too small and real effects go undetected. Too large and you waste time running an experiment that was conclusive weeks earlier. The required sample size calculation here sets a minimum floor before a single visitor is assigned.
+**Pre-test power analysis.** You cannot interpret a test result if you did not size the test beforehand. Too small and real effects go undetected. Too large and you waste weeks on an experiment that was already conclusive. Fixing the sample size in advance is also what stops you peeking at the data and stopping when the numbers look good, which is the most common way A/B tests mislead.
 
-**Frequentist z-test.** Two-proportion test with Bonferroni correction for the multiple metric comparison. Reports a p-value and 95% confidence interval on the absolute lift.
+**Frequentist z-test.** Two-proportion test with Bonferroni correction for multiple metric comparisons. Reports a p-value and a 95% confidence interval on the absolute lift. The interval is the more useful output, because it describes the plausible range of the effect rather than just rejecting a null.
 
-**Bayesian Beta-Binomial.** Starts with a flat Beta(1,1) prior and updates it with the observed data. The output — "99% probability that treatment is better" — is the number a business stakeholder can actually act on. The frequentist p-value says something subtly different and most people reading a dashboard misinterpret it.
+**Bayesian Beta-Binomial.** Starts from a flat Beta(1,1) prior and updates with the observed data. The output, the probability that treatment beats control, is the phrasing a business stakeholder can act on directly. The frequentist p-value answers a subtly different question that most dashboard readers misinterpret.
 
-**CUPED variance reduction.** Using pre-experiment purchase history as a covariate, CUPED adjusts each user's observed outcome to remove variance that has nothing to do with the checkout change. Equivalent statistical power at a smaller sample size — which means faster iteration cycles.
+**Sample ratio mismatch check.** Before trusting any result, confirm that assignment actually came out near 50/50. A skewed split usually means a bug in the assignment or logging, and it invalidates everything downstream.
+
+## What this does not show
+
+- No revenue projection is claimed. Extrapolating a simulated lift to an annual figure would be inventing a number.
+- A single test on simulated data says nothing about whether multi-step checkout works in any real business.
+- Novelty effects cannot appear in simulated data. In a real test, a lift this size would need 2 to 4 weeks of post-launch monitoring before being treated as permanent.
 
 ## Running the analysis
 
@@ -52,17 +66,9 @@ python ab_test_analysis.py
 
 | File | Contents |
 |------|----------|
-| `output/ab_test_results.png` | Conversion rates, lift confidence interval, AOV distribution |
+| `output/ab_test_results.png` | Conversion rates and lift confidence interval |
 | `output/bayesian_posteriors.png` | Posterior distributions and lift probability |
-| `output/power_curve.png` | Sample size vs. MDE at varying power levels |
-
-## Three things to take forward
-
-Ship the one-page checkout. The evidence is strong on both the frequentist and Bayesian sides, and the AOV improvement removes any concern that simplifying the flow was trading conversion for order quality.
-
-Apply CUPED in future experiments. Variance reduction compresses experiment runtime. At the traffic levels in this model, that means weeks off experiment cycles.
-
-Monitor for 2 to 4 weeks post-launch. Novelty effects can inflate short-term conversion lifts. The result should hold — but confirm it before committing to the annualised revenue estimate.
+| `output/power_curve.png` | Sample size vs MDE at varying power levels |
 
 Built with Python using scipy.stats, pandas, numpy, and matplotlib.
 
