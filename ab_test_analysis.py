@@ -91,7 +91,7 @@ def power_analysis(baseline_cr=0.04, mde=0.005, alpha=0.05, power=0.80):
 
 
 # ─── 2. GENERATE EXPERIMENT DATA ──────────────────────────────────────────────
-def generate_experiment(n_per_group=5000, seed=42):
+def generate_experiment(n_per_group=25551, seed=42):
     np.random.seed(seed)
 
     # True treatment effect: +1.2pp conversion lift, +$3 AOV lift
